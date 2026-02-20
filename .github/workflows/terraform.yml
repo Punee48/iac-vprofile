@@ -16,8 +16,8 @@ on:
 
 # Environment Variables for this Workflow
 env:
-    AWS_ACCESS_KEY: ${{secrets.AWS_ACCESS_KEY}}
-    AWS_SECRET_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
+    AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY}}
+    AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
     BUCKET_NAME: ${{secrets.S3_BUCKET}}
     AWS_REGION: ap-south-1
     EKS_CLUSTER: kitops-eks
@@ -63,3 +63,30 @@ jobs:
             - name: "Terraform Plan Status"
               if: steps.plan.outputs == 'failure' # Check if the Plan Steps is failed or not
               run: echo "Terraform Plan Failed. Please check the code and try again"
+
+            - name: "Terraform Apply to the Main Branch"
+              id: planinfra
+              if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Run this stepsonly when the code is pushed to the main branch in repos
+              run: terraform apply -auto-approve -no-color -input=false -parallelism=1 planfile  # parallelism is used to run or create 1 resource at a time to avoid any dependency 
+
+              # Connect to the AWS Console 
+            - name: "AWS Configure Account"
+              uses: aws-actions/configure-aws-credentials@v6.0.0
+              with:
+                    aws-region: ${{env.AWS_REGION}}
+                    aws-access-key-id: ${{env.AWS_ACCESS_KEY_ID}}
+                    aws-secret-access-key: ${{env.AWS_SECRET_ACCESS_KEY}}
+
+            - name: "Get EKS Cluster Config"
+              id: eks-config
+              if: steps.planinfra.outputs == 'success'
+              run: aws eks update-kubeconfig --region ${{env.AWS_REGION}} --name ${{env.EKS_CLUSTER}} # Get the EKS Cluster config to connect to the cluster to use kubectl command inside the Cluster
+
+
+            - name: "Install Ingress Controller"
+              id: install-ingress
+              if: steps.eks-config.outputs == 'success'
+              run: |
+                    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.2.0/deploy/static/provider/aws/deploy.yaml
+                  
+
