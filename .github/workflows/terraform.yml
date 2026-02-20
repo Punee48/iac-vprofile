@@ -1,0 +1,65 @@
+name: "Terraform Code Automation"
+on:
+    push:
+        branches:
+            # Trigger this workflows when a commit is pushed to this branched
+            - main
+            - stage
+        paths:
+            - terraform/** # Trigger this workflow only when there are changes in the terraform directory
+
+    pull_request:
+        branches:
+            - main
+        paths:
+            - terraform/**
+
+# Environment Variables for this Workflow
+env:
+    AWS_ACCESS_KEY: ${{secrets.AWS_ACCESS_KEY}}
+    AWS_SECRET_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
+    BUCKET_NAME: ${{secrets.S3_BUCKET}}
+    AWS_REGION: ap-south-1
+    EKS_CLUSTER: kitops-eks
+
+jobs:
+    terraform:
+        name: "Terraform Plan and Apply in Stagging Environment"
+        runs-on: ubuntu-latest # Jobs run in the Ubuntu Machine and Github Action will create a Ubuntu Image for this Workflow
+
+        # Set the default Working Directory and shell for this Job to run all following jobs
+        defaults:
+            run:
+                shell: bash
+                working-directory: ./terraform # Set the working directory for this Job to run the following command
+
+        # Steps to run in this Job
+        steps:
+            - name: "Checkout Code"
+              uses: actions/checkout@v6
+
+            - name: "Terraform Setup to run the Terraform commands"
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: "1.1.7"
+
+            - name: "Terraform init to initialize the Terraform configuration ans backend"
+              id: init # Set an ID for this step to refer it in the future or next steps
+              run: terraform init -no-color -backend-config="bucket=$BUCKET_NAME"
+
+            - name: "Terraform Format the code"
+              id: format
+              run: terraform fmt -check # Check if the code is formatted correctly or not
+
+            - name: "Terraform validate the code"
+              id: validate
+              run: terraform validate -no-color
+
+            - name: "Terraform Plan to see the changes in Infrastructure"
+              id: plan
+              run: terraform plan -no-color -input=false -out planfile # Run Plan command and No color output and input false to avoid any input during the execution and create a file for output
+              continue-on-error: true
+
+            - name: "Terraform Plan Status"
+              if: steps.plan.outputs == 'failure' # Check if the Plan Steps is failed or not
+              run: echo "Terraform Plan Failed. Please check the code and try again"
