@@ -40,8 +40,8 @@ jobs:
 
             - name: "Terraform Setup to run the Terraform commands"
               uses: hashicorp/setup-terraform@v3
-              with:
-                  terraform_version: "1.1.7"
+            #   with:
+            #       terraform_version: "1.1.7"
 
             - name: "Terraform init to initialize the Terraform configuration ans backend"
               id: init # Set an ID for this step to refer it in the future or next steps
